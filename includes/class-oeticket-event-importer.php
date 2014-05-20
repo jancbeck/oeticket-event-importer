@@ -336,10 +336,11 @@ class oeticket_Event_Importer {
 		 * - Change 'manage_options' to the capability you see fit
 		 *   For reference: http://codex.wordpress.org/Roles_and_Capabilities
 		 */
-		$this->plugin_screen_hook_suffix = add_options_page(
+		$this->plugin_screen_hook_suffix = add_submenu_page(
+			'/edit.php?post_type=' . TribeEvents::POSTTYPE,
 			__( 'Page Title', $this->plugin_slug ),
 			__( 'Menu Text', $this->plugin_slug ),
-			'manage_options',
+			'edit_posts',
 			$this->plugin_slug,
 			array( $this, 'display_plugin_admin_page' )
 		);
