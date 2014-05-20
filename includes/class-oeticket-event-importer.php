@@ -286,7 +286,7 @@ class oeticket_Event_Importer {
 
 		$screen = get_current_screen();
 		if ( $this->plugin_screen_hook_suffix == $screen->id ) {
-			wp_enqueue_style( $this->plugin_slug .'-admin-styles', plugins_url( 'assets/css/admin.css', __FILE__ ), array(), oeticket.com_Event_Importer::VERSION );
+			wp_enqueue_style( $this->plugin_slug .'-admin-styles', plugins_url( 'assets/css/admin.css', __FILE__ ), array(), $this->VERSION );
 		}
 
 	}
@@ -310,7 +310,7 @@ class oeticket_Event_Importer {
 
 		$screen = get_current_screen();
 		if ( $this->plugin_screen_hook_suffix == $screen->id ) {
-			wp_enqueue_script( $this->plugin_slug . '-admin-script', plugins_url( 'assets/js/admin.js', __FILE__ ), array( 'jquery' ), oeticket.com_Event_Importer::VERSION );
+			wp_enqueue_script( $this->plugin_slug . '-admin-script', plugins_url( 'assets/js/admin.js', __FILE__ ), array( 'jquery' ), $this->VERSION );
 		}
 
 	}
@@ -352,7 +352,7 @@ class oeticket_Event_Importer {
 	 * @since    1.0.0
 	 */
 	public function display_plugin_admin_page() {
-		include_once( 'views/admin.php' );
+		include_once( plugin_dir_path( __DIR__ ) .'views/admin.php' );
 	}
 
 	/**
