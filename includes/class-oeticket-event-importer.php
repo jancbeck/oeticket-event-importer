@@ -28,7 +28,7 @@ class oeticket_Event_Importer {
 	static $api_key = "9EEXgSSc1Rpq/M8uW8VpgCu8EFNCwLtgKwXcu0UKkHzxtB3AaRQMoBFrxFvHEcJhxk+RgGRlhj5Ax1vOPqUb1w==";
 	static $api_url = "https://api.import.io/store/connector/";
 	static $event_extractor_guid = "7840fd2d-dbd0-442a-8b5f-a57bc181d1a6";
-	static $reccuring_extractor_guid = "a7b28577-e0eb-4267-b9e6-08ef476d5c02";
+	static $instances_extractor_guid = "a7b28577-e0eb-4267-b9e6-08ef476d5c02";
 	static $venue_extractor_guid = "4f4fd502-3005-45e0-8d2a-cc7ff42d7a4a";
 
 	/**
@@ -346,14 +346,14 @@ class oeticket_Event_Importer {
 	 * @param string $connector name of the connector to be used for Import.io
 	 * @return string the full URL
 	 */
-	function build_extractor_url( $connector = null ) {
+	public function build_extractor_url( $connector = null ) {
 		switch ( $connector ) {
 			case 'venue':
-				$connector_guid = apply_filters( 'oeticket_import_get_reccuring_extractor_guid', self::$venue_extractor_guid );
+				$connector_guid = apply_filters( 'oeticket_import_get_venue_extractor_guid', self::$venue_extractor_guid );
 				break;
 
-			case 'reccuring':
-				$connector_guid = apply_filters( 'oeticket_import_get_reccuring_extractor_guid', self::$reccuring_extractor_guid );
+			case 'instances':
+				$connector_guid = apply_filters( 'oeticket_import_get_instances_extractor_guid', self::$instances_extractor_guid );
 				break;
 
 			default:
@@ -379,7 +379,7 @@ class oeticket_Event_Importer {
 	 * @param string $event_url the event url to query
 	 * @return string the json string
 	 */
-	function json_retrieve( $url, $event_url ) {
+	public function json_retrieve( $url, $event_url ) {
 		$args = array( 'body' => json_encode( array( 'input' => array( 'webpage/url' => $event_url ))));
 		$response = wp_remote_post( $url, $args );
 		$response = json_decode( wp_remote_retrieve_body( $response ) );
@@ -394,10 +394,18 @@ class oeticket_Event_Importer {
 	 * @param string $event_url the url of the event to retrieve
 	 * @return array the json data
 	 */
-	function get_oeticket_event( $event_url ) {
+	public function get_oeticket_event( $event_url ) {
 		$event = $this->json_retrieve( $this->build_extractor_url(), $event_url );
+
+		if ( empty( $event->results ) ) {
+			 return new WP_Error( 'invalid_event', sprintf( __( "Either the event with ID %s does not exist or we couldn't reach the Import.io API", $this->plugin_slug ), $oeticket_event_url ) );
+		}
 		$this->event_object = $event->results[0];
 		$this->event_object->url = $event_url;
+		$event_instances = $this->json_retrieve( $this->build_extractor_url( 'instances' ), $event_url );
+		if ( ! empty( $event->results ) ) {
+			$this->event_object->instances = $event_instances->results;
+		}
 		return $this->event_object;
 	}
 
@@ -409,7 +417,7 @@ class oeticket_Event_Importer {
 	 * @param string $raw_event_ids the raw oeticket.com URLs
 	 * @return array the parsed oeticket URLs
 	 */
-	function parse_events_from_textarea( $raw_event_urls ) {
+	public function parse_events_from_textarea( $raw_event_urls ) {
 		$event_urls = (array) explode( "\n", tribe_multi_line_remove_empty_lines( $raw_event_urls ));
 		$event_urls = array_map( 'esc_url_raw', $event_urls );
 
@@ -491,11 +499,10 @@ class oeticket_Event_Importer {
 	 * @author jkudish
 	 * @since    1.0.0
 	 */
-	function create_local_event( $oeticket_event_url ) {
+	public function create_local_event( $oeticket_event_url ) {
 
 		// Get the oetick event
 		$oeticket_event = $this->get_oeticket_event( $oeticket_event_url );
-
 
 		if ( isset( $oeticket_event->title ) ) {
 
@@ -524,11 +531,16 @@ class oeticket_Event_Importer {
 					// count this as a successful import
 					$this->imported_total++;
 
+					if ( ! empty( $event_cover ) ) {
 
-						// push the actual picture data to the local file system
-						$file_saved = file_put_contents($uploads['path'] . "/" . $filename, $event_picture['source']);
+						// setup clean vars to import the photo
+						$event_cover['url'] = stripslashes($event_cover['url']);
+						$uploads = wp_upload_dir();
+						$wp_filetype = wp_check_filetype($event_cover['url'], null );
+						$filename = wp_unique_filename( $uploads['path'], basename('oeticket_event_' . $oeticket_event->id), $unique_filename_callback = null ) . '.' . $wp_filetype['ext'];
+						$full_path_filename = $uploads['path'] . "/" . $filename;
 
-						if ( $file_saved ) {
+						if ( substr_count( $wp_filetype['type'], "image" ) ) {
 
 							// push the actual picture data to the local file system
 							$file_saved = file_put_contents($uploads['path'] . "/" . $filename, $event_cover['source']);
@@ -567,34 +579,37 @@ class oeticket_Event_Importer {
 						}
 					}
 
-				// set the event's Facebook ID meta
-				update_post_meta( $event_id, '_ecp_custom_1', $args['FacebookID'] );
+					// set the event's Facebook ID meta
+					update_post_meta( $event_id, '_ecp_custom_1', $args['ticketURL'] );
+					update_post_meta( $event_id, 'oeticketURL', $args['oeticketURL'] );
 
-				// set the event's map status if global setting is enabled
-				if( tribe_get_option('fb_enable_GoogleMaps') ) {
-					update_post_meta( $event_id, '_EventShowMap', true );
+					// set the event's map status if global setting is enabled
+					if( tribe_get_option('fb_enable_GoogleMaps') ) {
+						update_post_meta( $event_id, '_EventShowMap', true );
+					}
+
+					// get the created venue IDs
+					$venue_id = tribe_get_venue_id( $event_id );
+
+					// Set the post status to publish for the venue.
+					if ( get_post_status( $venue_id ) != 'publish' ) {
+						wp_publish_post( $venue_id );
+					}
+
+					// set venue Facebook ID
+					if ( isset( $args['Venue']['oeticketURL'] ) ) {
+						update_post_meta( $venue_id, '_VenueOeticketURL', $args['Venue']['oeticketURL'] );
+					}
+
+					// remove filter for the origin trail
+					remove_filter( 'tribe-post-origin', array( $this, 'origin_filter' ) );
+
+					return array( 'event' => $event_id, 'venue' => $venue_id );
+				} else {
+					$this->errors[] = sprintf( __( 'The instances of the event "%s" were already imported from oeticket.com. These instances have been skipped.', $this->plugin_slug ), $oeticket_event->title );
 				}
-
-				// get the created venue IDs
-				$venue_id = tribe_get_venue_id( $event_id );
-
-				// Set the post status to publish for the venue.
-				if ( get_post_status( $venue_id ) != 'publish' ) {
-					wp_publish_post( $venue_id );
-				}
-
-				// set venue Facebook ID
-				if ( isset( $args['Venue']['FacebookID'] ) ) {
-					update_post_meta( $venue_id, '_VenueFacebookID', $args['Venue']['FacebookID'] );
-				}
-
-				// remove filter for the origin trail
-				remove_filter( 'tribe-post-origin', array( $this, 'origin_filter' ) );
-
-				return array( 'event' => $event_id, 'venue' => $venue_id );
-			} else {
-				return new WP_Error( 'event_already_exists', sprintf( __( 'The event "%s" was already imported from oeticket.com.', $this->plugin_slug ), $oeticket_event->name, $oeticket_event ) );
 			}
+
 		} else {
 			do_action('log', 'Facebook event', 'tribe-events-facebook', $oeticket_event);
 			return new WP_Error( 'invalid_event', sprintf( __( "Either the event with ID %s does not exist or we couldn't reach the Import.io API", $this->plugin_slug ), $oeticket_event_url ) );
@@ -608,7 +623,7 @@ class oeticket_Event_Importer {
 	 * @author jkudish
 	 * @return string facebook importer identifier
 	 */
-	function origin_filter() {
+	public function origin_filter() {
 		return self::$plugin_slug;
 	}
 
