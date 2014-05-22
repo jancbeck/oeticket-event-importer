@@ -469,6 +469,20 @@ class oeticket_Event_Importer {
 		}
 	}
 
+	public function get_event_cover( $url ) {
+		$get_photo = wp_remote_get( $url );
+
+		if ( ! is_wp_error( $get_photo) ) {
+			return apply_filters( 'oeticket_get_event_cover', array( 'url' => $url, 'source' => $get_photo['body'] ) );
+		} else {
+			if ( is_wp_error( $get_photo ) ) {
+				$this->errors_images[] = $get_photo->get_error_message();
+			} else {
+				$this->errors_images[] = __( 'Could not successfully import the image for unknown reasons.', $this->plugin_slug );
+			}
+		}
+	}
+
 	/**
 	 * Create or update an event given an URL from oeticket
 	 *
@@ -485,67 +499,73 @@ class oeticket_Event_Importer {
 
 		if ( isset( $oeticket_event->title ) ) {
 
+			var_dump($oeticket_event);
+
+			if ( $event_cover_source = "http:". $oeticket_event->{'cover/_source'} ) {
+				$event_cover = apply_filters( 'oeticket_event_cover', $this->get_event_cover( $event_cover_source ), $oeticket_event );
+			}
+
 			// parse the event
 			$args = $this->parse_oeticket_event( $oeticket_event );
-			var_dump($args);
 
-			if ( !$this->find_local_object_with_oeticket_url( $args['oeticketURL'], 'event' ) ) {
-				// filter the origin trail
-				add_filter( 'tribe-post-origin', array( $this, 'origin_filter' ) );
+			foreach ( $oeticket_event->instances as $event_instance ) {
 
-				// create the event
-				$event_id = tribe_create_event( $args );
+				if ( !$this->find_local_object_with_oeticket_url( $args['oeticketURL'], 'event' ) ) {
+					// filter the origin trail
+					add_filter( 'tribe-post-origin', array( $this, 'origin_filter' ) );
 
-				// count this as a successful import
-				$this->imported_total++;
+					$instance_args = $this->parse_oeticket_event_instance( $event_instance, $args );
 
-				if ( ! empty( $event_picture ) ) {
+					// create the event
+					// https://gist.github.com/leszekr/5011218
+					// http://docs.tri.be/Events-Calendar/source-function-tribe_create_event.html#13-53
+					$event_id = tribe_create_event( $instance_args );
 
-					// setup clean vars to import the photo
-					$event_picture['url'] = stripslashes($event_picture['url']);
-					$uploads = wp_upload_dir();
-					$wp_filetype = wp_check_filetype($event_picture['url'], null );
-					$filename = wp_unique_filename( $uploads['path'], basename('oeticket_event_' . $oeticket_event->id), $unique_filename_callback = null ) . '.' . $wp_filetype['ext'];
-					$full_path_filename = $uploads['path'] . "/" . $filename;
+					// count this as a successful import
+					$this->imported_total++;
 
-					if ( substr_count( $wp_filetype['type'], "image" ) ) {
 
 						// push the actual picture data to the local file system
 						$file_saved = file_put_contents($uploads['path'] . "/" . $filename, $event_picture['source']);
 
 						if ( $file_saved ) {
 
-							// setup attachment params
-							$attachment = array(
-								 'post_mime_type' => $wp_filetype['type'],
-								 'post_title' => preg_replace('/\.[^.]+$/', '', $filename),
-								 'post_content' => '',
-								 'post_status' => 'inherit',
-								 'guid' => $uploads['url'] . "/" . $filename
-							);
+							// push the actual picture data to the local file system
+							$file_saved = file_put_contents($uploads['path'] . "/" . $filename, $event_cover['source']);
 
-							// attach photo to post obj (event)
-							$attach_id = wp_insert_attachment( $attachment, $full_path_filename, $event_id );
+							if ( $file_saved ) {
 
-							if ( $attach_id ) {
-								// set the thumbnail (featured image)
-								set_post_thumbnail($event_id, $attach_id);
+								// setup attachment params
+								$attachment = array(
+									 'post_mime_type' => $wp_filetype['type'],
+									 'post_title' => preg_replace('/\.[^.]+$/', '', $filename),
+									 'post_content' => '',
+									 'post_status' => 'inherit',
+									 'guid' => $uploads['url'] . "/" . $filename
+								);
 
-								// attach metadata for attachment
-								require_once(ABSPATH . "wp-admin" . '/includes/image.php');
-								$attach_data = wp_generate_attachment_metadata( $attach_id, $full_path_filename );
-								wp_update_attachment_metadata( $attach_id,  $attach_data );
+								// attach photo to post obj (event)
+								$attach_id = wp_insert_attachment( $attachment, $full_path_filename, $event_id );
 
+								if ( $attach_id ) {
+									// set the thumbnail (featured image)
+									set_post_thumbnail($event_id, $attach_id);
+
+									// attach metadata for attachment
+									require_once(ABSPATH . "wp-admin" . '/includes/image.php');
+									$attach_data = wp_generate_attachment_metadata( $attach_id, $full_path_filename );
+									wp_update_attachment_metadata( $attach_id,  $attach_data );
+
+								} else {
+									$this->errors_images[] = sprintf( __( '%s. Event Image Error: Failed to save record into database.', $this->plugin_slug ), $oeticket_event->title);
+								}
 							} else {
-								$this->errors_images[] = sprintf( __( '%s. Event Image Error: Failed to save record into database.', $this->plugin_slug ), $oeticket_event->name);
+								$this->errors_images[] = sprintf( __( '%s. Event Image Error: The file cannot be saved.', $this->plugin_slug ), $oeticket_event->title);
 							}
 						} else {
-							$this->errors_images[] = sprintf( __( '%s. Event Image Error: The file cannot be saved.', $this->plugin_slug ), $oeticket_event->name);
+							$this->errors_images[] = sprintf( __( '%s. Event Image Error: "%s" is not a valid image. %s', $this->plugin_slug ), $oeticket_event->title, basename($event_cover['url']), $wp_filetype['type'] );
 						}
-					} else {
-						$this->errors_images[] = sprintf( __( '%s. Event Image Error: "%s" is not a valid image. %s', $this->plugin_slug ), $oeticket_event->name, basename($event_picture['url']), $wp_filetype['type'] );
 					}
-				}
 
 				// set the event's Facebook ID meta
 				update_post_meta( $event_id, '_ecp_custom_1', $args['FacebookID'] );
