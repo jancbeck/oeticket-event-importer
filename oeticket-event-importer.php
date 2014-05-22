@@ -20,33 +20,25 @@ if ( ! defined( 'WPINC' ) ) {
 
 if ( is_admin() ) {
 
-/*
- * @TODO:
- *
- * - replace `class-oeticket-event-importer.php` with the name of the plugin's class file
- *
- */
-require_once( plugin_dir_path( __FILE__ ) . 'includes/class-oeticket-event-importer.php' );
+	require_once( plugin_dir_path( __FILE__ ) . 'includes/class-oeticket-event-importer.php' );
+	add_action( 'plugins_loaded', 'init_oticket_event_importer' );
 
-/*
- * Register hooks that are fired when the plugin is activated or deactivated.
- * When the plugin is deleted, the uninstall.php file is loaded.
- *
- * @TODO:
- *
- * - replace oeticket.com_Event_Importer with the name of the class defined in
- *   `class-oeticket-event-importer.php`
- */
-register_activation_hook( __FILE__, array( 'oeticket_Event_Importer', 'activate' ) );
-register_deactivation_hook( __FILE__, array( 'oeticket_Event_Importer', 'deactivate' ) );
+	function init_oticket_event_importer() {
+		add_filter( 'tribe_tec_addons', array( 'oeticket_Event_Importer', 'init_addon' ) );
+		if ( class_exists( 'TribeEvents' ) && defined( 'TribeEvents::VERSION' ) && version_compare( TribeEvents::VERSION, oeticket_Event_Importer::REQUIRED_TEC_VERSION, '>=' ) ) {
+			oeticket_Event_Importer::get_instance();
+		}
+		if ( !class_exists( 'TribeEvents' ) ) {
+			add_action( 'admin_notices', array( 'oeticket_Event_Importer', 'fail_message' ) );
+		}
+	}
 
-/*
- * @TODO:
- *
- * - replace oeticket.com_Event_Importer with the name of the class defined in
- *   `class-oeticket-event-importer.php`
- */
-add_action( 'plugins_loaded', array( 'oeticket_Event_Importer', 'get_instance' ) );
+	/*
+	 * Register hooks that are fired when the plugin is activated or deactivated.
+	 * When the plugin is deleted, the uninstall.php file is loaded.
+	 */
+	register_activation_hook( __FILE__, array( 'oeticket_Event_Importer', 'activate' ) );
+	register_deactivation_hook( __FILE__, array( 'oeticket_Event_Importer', 'deactivate' ) );
 
 }
 
