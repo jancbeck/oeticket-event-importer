@@ -1,17 +1,5 @@
 <?php
 /**
- * The WordPress Plugin Boilerplate.
- *
- * A foundation off of which to build well-documented WordPress plugins that
- * also follow WordPress Coding Standards and PHP best practices.
- *
- * @package   oeticket_event_importer
- * @author    Jan Beck <mail@jancbeck.com>
- * @license   GPL-2.0+
- * @link      http://jancbeck.com/
- * @copyright 2014 Jan Beck
- *
- * @wordpress-plugin
  * Plugin Name:       oeticket.com Event Importer
  * Plugin URI:        http://jancbeck.com/oeticket-importer/
  * Description:       This plugin allows you to easily import event data from oeticket.com to the Events Calendar by Modern Tribe for WordPress.
@@ -22,7 +10,7 @@
  * License:           GPL-2.0+
  * License URI:       http://www.gnu.org/licenses/gpl-2.0.txt
  * Domain Path:       /languages
- * GitHub Plugin URI: https://github.com/<owner>/<repo>
+ * GitHub Plugin URI: https://github.com/jancbeck/oeticket-event-importer/
  */
 
 // If this file is called directly, abort.
