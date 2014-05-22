@@ -1,14 +1,14 @@
-=== @TODO: Plugin Name ===
-Contributors: (this should be a list of wordpress.org userids)
-Donate link: http://example.com/
-Tags: comments, spam
-Requires at least: 3.5.1
-Tested up to: 3.6
+=== Oeticket.com Event Importer ===
+Contributors: jancbeck
+Donate link: http://jancbeck.com/
+Tags: import, events, event calendar, calendar, tickets
+Requires at least: 3.9.1
+Tested up to: 3.9.1
 Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
-Here is a short description of the plugin.  This should be no more than 150 characters.  No markup here.
+This plugin allows you to easily import event data from oeticket.com to the Events Calendar by Modern Tribe for WordPress.
 
 == Description ==
 
@@ -41,12 +41,10 @@ you put the stable version, in order to eliminate any doubt.
 
 This section describes how to install the plugin and get it working.
 
-e.g.
-
 = Using The WordPress Dashboard =
 
 1. Navigate to the 'Add New' in the plugins dashboard
-2. Search for 'plugin-name'
+2. Search for 'oeticket.com Event Importer'
 3. Click 'Install Now'
 4. Activate the plugin on the Plugin dashboard
 
@@ -54,15 +52,15 @@ e.g.
 
 1. Navigate to the 'Add New' in the plugins dashboard
 2. Navigate to the 'Upload' area
-3. Select `plugin-name.zip` from your computer
+3. Select `oeticket-event-importer.zip` from your computer
 4. Click 'Install Now'
 5. Activate the plugin in the Plugin dashboard
 
 = Using FTP =
 
-1. Download `plugin-name.zip`
-2. Extract the `plugin-name` directory to your computer
-3. Upload the `plugin-name` directory to the `/wp-content/plugins/` directory
+1. Download `oeticket-event-importer.zip`
+2. Extract the `oeticket-event-importer` directory to your computer
+3. Upload the `oeticket-event-importer` directory to the `/wp-content/plugins/` directory
 4. Activate the plugin in the Plugin dashboard
 
 
