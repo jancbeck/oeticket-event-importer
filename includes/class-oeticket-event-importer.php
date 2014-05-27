@@ -710,10 +710,15 @@ class oeticket_Event_Importer {
 			$event_params['EventVenueID'] = $local_venue_id;
 		}
 
-		// set tax
-		if ( ! empty( $single_event->category )) {
-			$categories = array_map( 'trim', explode(',', $single_event->category));
-			//$event_params['tax_input'] = array( TribeEvents::TAXONOMY => $categories );
+		// set taxonomy terms
+		if ( ! empty( $oeticket_event->category ) && $categories = array_map( 'trim', explode(', ', $oeticket_event->category))) {
+
+			$taxonomy = TribeEvents::TAXONOMY;
+			$event_params['tax_input'] = array( $taxonomy => array() );
+			foreach ($categories as $category) {
+				$term = get_term_by( 'name', $category, TribeEvents::TAXONOMY );
+				$event_params['tax_input'][$taxonomy][] = $term->term_id;
+			}
 		}
 
 		$start_date = $single_event->startdate;
