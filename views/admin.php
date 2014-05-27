@@ -35,7 +35,7 @@
 		<div class="updated">
 			<p><?php
 
-				printf(_n('The selected event has been successfully imported.', 'The %d selected events have been successfully imported.', $this->imported_total, $this->plugin_slug ), $this->imported_total);
+				printf(_n('The event has been successfully imported.', 'The %d events have been successfully imported.', $this->imported_total, $this->plugin_slug ), $this->imported_total);
 
 			?></p>
 		</div>

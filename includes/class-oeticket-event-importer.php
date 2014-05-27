@@ -66,6 +66,10 @@ class oeticket_Event_Importer {
 		// Add the options page and menu item.
 		add_action( 'admin_menu', array( $this, 'add_plugin_admin_menu' ) );
 
+		add_action( 'tribe_events_venue_updated', array( $this, 'tribe_events_venue_updated'), 10, 2 );
+		add_action( 'tribe_events_venue_created', array( $this, 'tribe_events_venue_created'), 10, 2 );
+		add_action( 'tribe_events_update_meta', array( $this, 'tribe_events_update_meta'), 10, 2 );
+
 		// Add an action link pointing to the options page.
 		$plugin_basename = plugin_basename( plugin_dir_path( __DIR__ ) . $this->plugin_slug . '.php' );
 		add_filter( 'plugin_action_links_' . $plugin_basename, array( $this, 'add_action_links' ) );
@@ -379,16 +383,21 @@ class oeticket_Event_Importer {
 	 * @param string $event_url the event url to query
 	 * @return string the json string
 	 */
-	public function json_retrieve( $url, $event_url ) {
-		$args = array( 'body' => json_encode( array( 'input' => array( 'webpage/url' => $event_url ))));
-		$response = wp_remote_post( $url, $args );
-		$response = json_decode( wp_remote_retrieve_body( $response ) );
+	public function json_retrieve( $api_url, $oeticket_url ) {
+		$args = array( 'body' => json_encode( array( 'input' => array( 'webpage/url' => $oeticket_url ))));
+		$response = wp_remote_post( $api_url, $args );
+
+		if ( is_wp_error( $response ) ) {
+		   $this->errors[] = $response->get_error_message(). " ($oeticket_url)";
+		} else {
+			$response = json_decode( wp_remote_retrieve_body( $response ) );
+		}
 		return $response;
 	}
 
 
 	/**
-	 * retrieve a oeticket object
+	 * retrieve a oeticket event object
 	 * example: http://www.oeticket.com/de/tickets/cirque-du-soleil-kooza-wien-under-the-grand-chapiteau-332281/event.html
 	 *
 	 * @param string $event_url the url of the event to retrieve
@@ -397,16 +406,41 @@ class oeticket_Event_Importer {
 	public function get_oeticket_event( $event_url ) {
 		$event = $this->json_retrieve( $this->build_extractor_url(), $event_url );
 
-		if ( empty( $event->results ) ) {
-			 return new WP_Error( 'invalid_event', sprintf( __( "Either the event with ID %s does not exist or we couldn't reach the Import.io API", $this->plugin_slug ), $oeticket_event_url ) );
-		}
-		$this->event_object = $event->results[0];
-		$this->event_object->url = $event_url;
-		$event_instances = $this->json_retrieve( $this->build_extractor_url( 'instances' ), $event_url );
 		if ( ! empty( $event->results ) ) {
-			$this->event_object->instances = $event_instances->results;
+			$this->event_object = $event->results[0];
+			$this->event_object->url = $event_url;
+			$this->event_object->instances = array();
+
+			for ($i=1; $i <= $this->event_object->paged; $i++) {
+				$event_instances = $this->json_retrieve( $this->build_extractor_url( 'instances' ), add_query_arg( array( 'spage' => $i ), $event_url ) );
+				if ( ! empty( $event_instances->results ) ) {
+					foreach ( $event_instances->results as $event_instance ) {
+						if ( ! empty( $event_instance->ticket_link ) ) {
+							$event_instance->ticket_link = apply_filters( 'oeticket_ticket_link', 'http://www.oeticket.com'. $event_instance->ticket_link, $event_instance->ticket_link );
+							$this->event_object->instances[] = $event_instance;
+						}
+					}
+				}
+			}
 		}
 		return $this->event_object;
+	}
+
+	/**
+	 * retrieve a oeticket venue
+	 * example: http://www.oeticket.com/de/spielstaetten/cirque-du-soleil-8926/venue.html
+	 *
+	 * @param string $venue_url the url of the venue to retrieve
+	 * @return array the json data
+	 */
+	public function get_oeticket_venue( $venue_url ) {
+		$response = $this->json_retrieve( $this->build_extractor_url( 'venue' ), $venue_url );
+
+		if ( ! is_wp_error( $response ) && ! empty( $response->results ) ) {
+			$response = $this->event_object->venue = $response->results[0];
+			$this->event_object->venue->url = esc_url( $venue_url );
+		}
+		return $response;
 	}
 
 
@@ -420,10 +454,11 @@ class oeticket_Event_Importer {
 	public function parse_events_from_textarea( $raw_event_urls ) {
 		$event_urls = (array) explode( "\n", tribe_multi_line_remove_empty_lines( $raw_event_urls ));
 		$event_urls = array_map( 'esc_url_raw', $event_urls );
+		$allowed_hosts = apply_filters( 'oeticket_allowed_hosts', array( 'www.oeticket.com' ) );
 
 		foreach ( $event_urls as $key => $event_url ) {
 			$event_url_host = parse_url( $event_url, PHP_URL_HOST );
-			if ( 'www.oeticket.com' != $event_url_host ) {
+			if ( ! in_array( $event_url_host , $allowed_hosts) ) {
 				unset( $event_urls[ $key ] );
 			}
 		}
@@ -489,12 +524,224 @@ class oeticket_Event_Importer {
 				$this->errors_images[] = __( 'Could not successfully import the image for unknown reasons.', $this->plugin_slug );
 			}
 		}
+		return false;
+	}
+
+	/**
+	 * find a locally stored event/venue with the specified oeticket URL
+	 *
+	 * @since 1.0
+	 * @author jkudish
+	 * @param string $oeticket_url the event or venue
+	 * @param string $object_type the type of object we are looking for
+	 * @param string $fallback_object_name the post title used as a fallback if $oeticket_url is empty for some reason
+	 * @return int|null the event ID or null on failure
+	 */
+	function find_local_object_with_oeticket_url( $oeticket_url, $object_type = 'event', $fallback_object_name = null ) {
+
+		remove_action( 'pre_get_posts', array( 'TribeEventsQuery', 'pre_get_posts' ), 50 );
+
+		switch ( $object_type ) {
+			case 'event' :
+				$meta_key = '_ecp_custom_1';
+				$post_type = TribeEvents::POSTTYPE;
+			break;
+			case 'venue' :
+				$meta_key = '_VenueOeticketURL';
+				$post_type = TribeEvents::VENUE_POST_TYPE;
+			break;
+			default :
+				return new WP_Error( 'invalid_object_type', __( 'Object type provided is invalid', $this->plugin_slug ), $object_type );
+		}
+
+		$query = new WP_Query();
+		$query_args = array(
+			'post_type' => $post_type,
+			'post_status' => 'any',
+			'posts_per_page' => -1,
+			'nopaging' => true,
+			'update_post_term_cache' => false,
+			'update_post_meta_cache' => false,
+			'meta_query' => array(
+				array(
+					'key' => $meta_key,
+					'value' => $oeticket_url,
+				)
+			)
+		);
+
+
+ 		$query->query( $query_args );
+
+		wp_reset_query();
+
+		// run query again but with post name if meta_query returned nothing
+		if ( empty( $query->posts[0] ) && $fallback_object_name ) {
+			unset($query_args['meta_query']);
+			$query_args['name'] = sanitize_title( $fallback_object_name );
+			$query->query( $query_args );
+		}
+
+		$post_id = ( !empty( $query->posts[0] ) ) ? $query->posts[0]->ID : false;
+
+		add_action( 'pre_get_posts', array( 'TribeEventsQuery', 'pre_get_posts' ), 50 );
+
+		return apply_filters( 'oeticket_find_local_object_with_oeticket_url', $post_id );
+	}
+
+	/**
+	 * parse the oeticket venue given an object URL
+	 * or use the venue property of the event itself
+	 *
+	 * @since 1.0
+	 * @author jkudish
+	 * @param object $facebook_event the Facebook event json object
+	 * @return object the venue object
+	 */
+	function parse_oeticket_venue( $oeticket_event ) {
+
+		if ( ! parse_url( $oeticket_event->venue_link, PHP_URL_HOST ) ) {
+			$oeticket_venue_link = 'http://www.oeticket.com'. $oeticket_event->venue_link;
+		}
+
+		$raw_venue = $this->get_oeticket_venue( $oeticket_venue_link );
+		$venue = new stdClass;
+		if ( ! is_wp_error( $raw_venue ) && ! empty( $raw_venue->venue_name ) ) {
+			$venue->oeticket_url = ( !empty( $raw_venue->url ) ) ? trim( $raw_venue->url ) : false;
+			$venue->name = ( !empty( $raw_venue->venue_name ) ) ? trim( $raw_venue->venue_name ) : false;
+			$venue->description = ( !empty( $raw_venue->venue_description ) ) ? trim( $raw_venue->venue_description ) : false;
+			$venue->address = ( !empty( $raw_venue->venue_street ) ) ? trim( $raw_venue->venue_street ) : false;
+			$venue->city = ( !empty( $raw_venue->venue_city ) ) ? trim( rtrim( $raw_venue->venue_city, ',' )) : false;
+			$venue->country = ( !empty( $raw_venue->venue_country ) ) ? trim( $raw_venue->venue_country ) : false;
+			$venue->zip = ( !empty( $raw_venue->venue_zip ) ) ? trim( $raw_venue->venue_zip ) : false;
+			$venue->map_link = ( !empty( $raw_venue->venue_map ) ) ? trim( $raw_venue->venue_map ) : false;
+		} else {
+			$venue->oeticket_url = false;
+			$venue->name = ( !empty( $oeticket_event->venue_name ) ) ? trim( $oeticket_event->venue_name ) : false;
+			$venue->description = false;
+			$venue->address = ( !empty( $oeticket_event->venue_street ) ) ? trim( $oeticket_event->venue_street ) : false;
+			$venue->city = ( !empty( $oeticket_event->venue_city ) ) ? trim( rtrim( $raw_venue->venue_city, ',' )) : false;
+			$venue->country = ( !empty( $oeticket_event->venue_country ) ) ? trim( $raw_venue->venue_country ) : false;
+			$venue->zip = ( !empty( $oeticket_event->venue_zip ) ) ? trim( $oeticket_event->venue_zip ) : false;
+		}
+		return $venue;
+	}
+
+	/**
+	 * determine if an event is an all day event or not
+	 *
+	 * @param string $start_time the start time
+	 * @param string $enddate the end time
+	 * @param string $oeticket_url the oeticket URL of the event / used in the filter
+	 * @return bool
+	 */
+	public function determine_if_is_all_day( $start_time, $enddate, $oeticket_url = '' ) {
+		$start_time = date( 'Hi', strtotime( $start_time ) );
+		$enddate = date( 'Hi', strtotime( $enddate ) );
+		$all_day_start_time = apply_filters( 'oeticket_all_day_start_time', '1000' );
+		$all_day_enddate = apply_filters( 'oeticket_all_day_enddate', '1000' );
+
+		if ( $all_day_start_time == $start_time && $all_day_enddate == $enddate ) {
+			$is_all_day = true;
+		} else {
+			$is_all_day = false;
+		}
+		return apply_filters( 'oeticket_determine_if_is_all_day', $is_all_day, $start_time, $enddate, $oeticket_url );
+	}
+
+	/**
+	 * parse an oeticket event to get all the necessary
+	 * params to create the local event
+	 *
+	 * @since 1.0
+	 * @author jkudish
+	 * @param object $facebook_event the Facebook event json object
+	 * @return array the event paramaters
+	 */
+	public function parse_oeticket_event_args( $single_event, $oeticket_event ) {
+
+		// fetch venue/organizer objects and local ID
+		$venue = $this->parse_oeticket_venue( $oeticket_event );
+		$local_venue_id = $this->find_local_object_with_oeticket_url( $venue->oeticket_url, 'venue', $venue->name );
+
+		// setup the base array
+		$event_params = array(
+			'OeticketURL' => $oeticket_event->url,
+			'post_title' => ( !empty( $oeticket_event->title ) ) ? $oeticket_event->title : '',
+			'post_status' => 'draft',
+			'post_author' => get_current_user_id(),
+			'post_content' => ( !empty( $oeticket_event->description ) ) ? make_clickable( $oeticket_event->description ) : '',
+		);
+
+		// set venue only if we have at least a name
+		if ( ! empty( $venue->name ) ) {
+
+			$local_venue_country = tribe_get_country( $local_venue_id );
+			$local_venue_city = tribe_get_city( $local_venue_id );
+			$local_venue_zip = tribe_get_zip( $local_venue_id );
+			$local_venue_address = tribe_get_address( $local_venue_id );
+			$local_venue_description = get_post_field( 'post_content', $local_venue_id, 'raw' );
+
+			$event_params['Venue'] = array(
+				'Venue' => $venue->name,
+				'Address' => ! empty( $local_venue_address ) ? $local_venue_address : $venue->address,
+				'City' =>  ! empty( $local_venue_city ) ? $local_venue_city : $venue->city,
+				'Country' => ! empty( $local_venue_country ) ? $local_venue_country : $venue->country,
+				'Zip' => ! empty( $local_venue_zip ) ? $local_venue_zip : $venue->zip,
+				'Description' => ! empty( $local_venue_description ) ? $local_venue_description : $venue->description,
+			);
+
+			if ( $venue->oeticket_url ) {
+				$event_params['Venue']['OeticketURL'] = $venue->oeticket_url;
+			}
+
+			if ( $venue->map_link && $map_link = wp_parse_args( $venue->map_link ) ) {
+				$ll = explode( ',', $map_link['ll'] );
+				$event_params['Venue']['ShowMap'] = true;
+				$event_params['Venue']['ShowMapLink'] = $venue->map_link;
+				$event_params['Venue']['Lat'] = @$ll[0];
+				$event_params['Venue']['Lng'] = @$ll[1];
+			}
+		}
+
+		// set venue ID
+		if ( !empty( $local_venue_id ) ) {
+			$event_params['Venue']['VenueID'] = $local_venue_id;
+			$event_params['EventVenueID'] = $local_venue_id;
+		}
+
+		// set tax
+		if ( ! empty( $single_event->category )) {
+			$categories = array_map( 'trim', explode(',', $single_event->category));
+			//$event_params['tax_input'] = array( TribeEvents::TAXONOMY => $categories );
+		}
+
+		$start_date = $single_event->startdate;
+		$end_date = ! empty( $single_event->enddate ) ? $single_event->enddate : $start_date;
+
+		// set the dates
+		$event_params['EventStartDate'] = TribeDateUtils::dateOnly( $start_date );
+		$event_params['EventEndDate'] = TribeDateUtils::dateOnly( $end_date );
+
+		// determine all day / set the time
+		if ( $this->determine_if_is_all_day( $start_date, $end_date, $single_event->ticket_link ) ) {
+			$event_params['EventAllDay'] = 'yes';
+		} else {
+			$event_params['EventStartHour'] = TribeDateUtils::hourOnly( $start_date );
+			$event_params['EventStartMinute'] = TribeDateUtils::minutesOnly( $start_date );
+			$event_params['EventStartMeridian'] = TribeDateUtils::meridianOnly( $start_date );
+			$event_params['EventEndHour'] = TribeDateUtils::hourOnly( $end_date );
+			$event_params['EventEndMinute'] = TribeDateUtils::minutesOnly( $end_date );
+			$event_params['EventEndMeridian'] = TribeDateUtils::meridianOnly( $end_date );
+		}
+
+		return apply_filters( 'oeticket_parse_event', $event_params, $single_event, $oeticket_event );
 	}
 
 	/**
 	 * Create or update an event given an URL from oeticket
 	 *
-	 * @param int $oeticket_event_url the Facebook ID of the event
+	 * @param string $oeticket_event_url the Facebook ID of the event
 	 * @return array|WP_Error
 	 * @author jkudish
 	 * @since    1.0.0
@@ -506,22 +753,17 @@ class oeticket_Event_Importer {
 
 		if ( isset( $oeticket_event->title ) ) {
 
-			var_dump($oeticket_event);
-
 			if ( $event_cover_source = "http:". $oeticket_event->{'cover/_source'} ) {
 				$event_cover = apply_filters( 'oeticket_event_cover', $this->get_event_cover( $event_cover_source ), $oeticket_event );
 			}
 
-			// parse the event
-			$args = $this->parse_oeticket_event( $oeticket_event );
+			foreach ( $oeticket_event->instances as $key => $event ) {
 
-			foreach ( $oeticket_event->instances as $event_instance ) {
-
-				if ( !$this->find_local_object_with_oeticket_url( $args['oeticketURL'], 'event' ) ) {
+				if ( ! $this->find_local_object_with_oeticket_url( $event->ticket_link, 'event' ) ) {
 					// filter the origin trail
-					add_filter( 'tribe-post-origin', array( $this, 'origin_filter' ) );
+					add_filter( 'tribe-post-origin', array( $this, 'get_plugin_slug' ) );
 
-					$instance_args = $this->parse_oeticket_event_instance( $event_instance, $args );
+					$instance_args = $this->parse_oeticket_event_args( $event, $oeticket_event );
 
 					// create the event
 					// https://gist.github.com/leszekr/5011218
@@ -579,9 +821,9 @@ class oeticket_Event_Importer {
 						}
 					}
 
-					// set the event's Facebook ID meta
-					update_post_meta( $event_id, '_ecp_custom_1', $args['ticketURL'] );
-					update_post_meta( $event_id, 'oeticketURL', $args['oeticketURL'] );
+					// set the event's Oeticket meta
+					update_post_meta( $event_id, '_ecp_custom_1', $event->ticket_link );
+					update_post_meta( $event_id, '_oeticketURL', $oeticket_event_url );
 
 					// set the event's map status if global setting is enabled
 					if( tribe_get_option('fb_enable_GoogleMaps') ) {
@@ -589,42 +831,49 @@ class oeticket_Event_Importer {
 					}
 
 					// get the created venue IDs
-					$venue_id = tribe_get_venue_id( $event_id );
+					$venue_id = ! empty( $instance_args['EventVenueID'] ) ? $instance_args['EventVenueID'] : tribe_get_venue_id( $event_id );
 
 					// Set the post status to publish for the venue.
 					if ( get_post_status( $venue_id ) != 'publish' ) {
 						wp_publish_post( $venue_id );
 					}
 
-					// set venue Facebook ID
+					// set venue oeticket URL
 					if ( isset( $args['Venue']['oeticketURL'] ) ) {
 						update_post_meta( $venue_id, '_VenueOeticketURL', $args['Venue']['oeticketURL'] );
 					}
 
 					// remove filter for the origin trail
-					remove_filter( 'tribe-post-origin', array( $this, 'origin_filter' ) );
+					remove_filter( 'tribe-post-origin', array( $this, 'get_plugin_slug' ) );
 
-					return array( 'event' => $event_id, 'venue' => $venue_id );
+					return apply_filters( 'oeticket_successful_import_data', array( 'event' => $event_id, 'venue' => $venue_id ) );
 				} else {
-					$this->errors[] = sprintf( __( 'The instances of the event "%s" were already imported from oeticket.com. These instances have been skipped.', $this->plugin_slug ), $oeticket_event->title );
+					$this->errors[] = sprintf( __( 'The instance of the event "%s" at %s was already imported from oeticket.com. These instances have been skipped.', $this->plugin_slug ), $oeticket_event->title, TribeDateUtils::dateOnly( $event->startdate ). ' ' .TribeDateUtils::timeOnly( $event->startdate ) );
 				}
 			}
 
 		} else {
 			do_action('log', 'Facebook event', 'tribe-events-facebook', $oeticket_event);
-			return new WP_Error( 'invalid_event', sprintf( __( "Either the event with ID %s does not exist or we couldn't reach the Import.io API", $this->plugin_slug ), $oeticket_event_url ) );
+			return new WP_Error( 'invalid_event', sprintf( __( "Either the event with URL %s does not exist or we couldn't reach the Import.io API", $this->plugin_slug ), make_clickable( $oeticket_event_url ) ) );
 		}
 	}
 
-	/**
-	 * origin/trail filter
-	 *
-	 * @since    1.0.0
-	 * @author jkudish
-	 * @return string facebook importer identifier
-	 */
-	public function origin_filter() {
-		return self::$plugin_slug;
+	public function tribe_events_update_meta( $post_id, $data ) {
+		$data['EventVenueID'] = ! empty( $data['EventVenueID']) ? $data['EventVenueID'] : $data['Venue']['VenueID'];
+
+		if ( ! empty( $data['EventVenueID'] ) && ! get_post_meta( $post_id, '_EventVenueID', true ) ) {
+			return update_post_meta( $post_id, '_EventVenueID', $data['EventVenueID'] );
+		}
+	}
+
+	public function tribe_events_venue_updated( $venue_id, $data ) {
+		if ( !empty( $data['Description'] ) ) {
+			wp_update_post( array( 'ID' => $venue_id, 'post_content' => $data['Description'] ) );
+		}
+	}
+
+	public function tribe_events_venue_created( $venue_id, $data  ) {
+		tribe_update_venue($venue_id, $data);
 	}
 
 	/**
