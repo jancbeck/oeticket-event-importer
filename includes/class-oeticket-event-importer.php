@@ -609,7 +609,7 @@ class oeticket_Event_Importer {
 		if ( ! is_wp_error( $raw_venue ) && ! empty( $raw_venue->venue_name ) ) {
 			$venue->oeticket_url = ( !empty( $raw_venue->url ) ) ? trim( $raw_venue->url ) : false;
 			$venue->name = ( !empty( $raw_venue->venue_name ) ) ? trim( $raw_venue->venue_name ) : false;
-			$venue->description = ( !empty( $raw_venue->venue_description ) ) ? trim( $raw_venue->venue_description ) : false;
+			$venue->description = ( !empty( $raw_venue->venue_description ) ) ? wp_strip_all_tags( $raw_venue->venue_description ) : false;
 			$venue->address = ( !empty( $raw_venue->venue_street ) ) ? trim( $raw_venue->venue_street ) : false;
 			$venue->city = ( !empty( $raw_venue->venue_city ) ) ? trim( rtrim( $raw_venue->venue_city, ',' )) : false;
 			$venue->country = ( !empty( $raw_venue->venue_country ) ) ? trim( $raw_venue->venue_country ) : false;
@@ -670,7 +670,7 @@ class oeticket_Event_Importer {
 			'post_title' => ( !empty( $oeticket_event->title ) ) ? $oeticket_event->title : '',
 			'post_status' => 'draft',
 			'post_author' => get_current_user_id(),
-			'post_content' => ( !empty( $oeticket_event->description ) ) ? make_clickable( $oeticket_event->description ) : '',
+			'post_content' => wp_strip_all_tags( $oeticket_event->description ),
 		);
 
 		// set venue only if we have at least a name
