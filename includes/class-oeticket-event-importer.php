@@ -762,6 +762,8 @@ class oeticket_Event_Importer {
 				$event_cover = apply_filters( 'oeticket_event_cover', $this->get_event_cover( "http:". $oeticket_event->{'cover/_source'} ), $oeticket_event );
 			}
 
+			$imported = array();
+
 			foreach ( $oeticket_event->instances as $key => $event ) {
 
 				if ( ! $this->find_local_object_with_oeticket_url( $event->ticket_link, 'event' ) ) {
@@ -851,11 +853,13 @@ class oeticket_Event_Importer {
 					// remove filter for the origin trail
 					remove_filter( 'tribe-post-origin', array( $this, 'get_plugin_slug' ) );
 
-					return apply_filters( 'oeticket_successful_import_data', array( 'event' => $event_id, 'venue' => $venue_id ) );
+					$imported[] = apply_filters( 'oeticket_successful_import_data', array( 'event' => $event_id, 'venue' => $venue_id ) );
 				} else {
 					$this->errors[] = sprintf( __( 'The instance of the event "%s" at %s was already imported from oeticket.com. These instances have been skipped.', $this->plugin_slug ), $oeticket_event->title, TribeDateUtils::dateOnly( $event->startdate ). ' ' .TribeDateUtils::timeOnly( $event->startdate ) );
 				}
 			}
+
+			return $imported;
 
 		} else {
 			do_action('log', 'Facebook event', 'tribe-events-facebook', $oeticket_event);
