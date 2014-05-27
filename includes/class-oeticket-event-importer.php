@@ -716,8 +716,17 @@ class oeticket_Event_Importer {
 			$taxonomy = TribeEvents::TAXONOMY;
 			$event_params['tax_input'] = array( $taxonomy => array() );
 			foreach ($categories as $category) {
-				$term = get_term_by( 'name', $category, TribeEvents::TAXONOMY );
-				$event_params['tax_input'][$taxonomy][] = $term->term_id;
+				if ( $term = get_term_by( 'name', $category, $taxonomy ) ) {
+					$term_id = $term->term_id;
+				} else {
+					$inserted_term = wp_insert_term( $category, $taxonomy );
+					if ( ! is_wp_error( $inserted_term )) {
+						$term_id = $inserted_term['term_id'];
+					} else {
+						continue;
+					}
+				}
+				$event_params['tax_input'][$taxonomy][] = $term_id;
 			}
 		}
 
