@@ -758,8 +758,8 @@ class oeticket_Event_Importer {
 
 		if ( isset( $oeticket_event->title ) ) {
 
-			if ( $event_cover_source = "http:". $oeticket_event->{'cover/_source'} ) {
-				$event_cover = apply_filters( 'oeticket_event_cover', $this->get_event_cover( $event_cover_source ), $oeticket_event );
+			if ( ! empty( $oeticket_event->{'cover/_source'} ) ) {
+				$event_cover = apply_filters( 'oeticket_event_cover', $this->get_event_cover( "http:". $oeticket_event->{'cover/_source'} ), $oeticket_event );
 			}
 
 			foreach ( $oeticket_event->instances as $key => $event ) {
