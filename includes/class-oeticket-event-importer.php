@@ -607,7 +607,7 @@ class oeticket_Event_Importer {
 		$raw_venue = $this->get_oeticket_venue( $oeticket_venue_link );
 		$venue = new stdClass;
 		if ( ! is_wp_error( $raw_venue ) && ! empty( $raw_venue->venue_name ) ) {
-			$venue->oeticket_url = ( !empty( $raw_venue->url ) ) ? trim( $raw_venue->url ) : false;
+			$venue->oeticket_url = $oeticket_venue_link;
 			$venue->name = ( !empty( $raw_venue->venue_name ) ) ? trim( $raw_venue->venue_name ) : false;
 			$venue->description = ( !empty( $raw_venue->venue_description ) ) ? wp_strip_all_tags( $raw_venue->venue_description ) : false;
 			$venue->address = ( !empty( $raw_venue->venue_street ) ) ? trim( $raw_venue->venue_street ) : false;
@@ -666,7 +666,7 @@ class oeticket_Event_Importer {
 
 		// setup the base array
 		$event_params = array(
-			'OeticketURL' => $oeticket_event->url,
+			'OeticketURL' => $oeticket_event->oeticket_url,
 			'post_title' => ( !empty( $oeticket_event->title ) ) ? $oeticket_event->title : '',
 			'post_status' => 'draft',
 			'post_author' => get_current_user_id(),
