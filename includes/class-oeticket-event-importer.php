@@ -18,7 +18,7 @@ class oeticket_Event_Importer {
 
 	protected static $instance;
 	const VERSION = '1.0.0';
-	const REQUIRED_TEC_VERSION = '3.6';
+	const REQUIRED_TEC_VERSION = '3.5';
 	protected static $plugin_slug = 'oeticket-event-importer';
 	public $errors = array();
 	public $errors_images = array();
@@ -66,7 +66,6 @@ class oeticket_Event_Importer {
 		// Add the options page and menu item.
 		add_action( 'admin_menu', array( $this, 'add_plugin_admin_menu' ) );
 
-		add_action( 'tribe_events_venue_updated', array( $this, 'tribe_events_venue_updated'), 10, 2 );
 		add_action( 'tribe_events_venue_created', array( $this, 'tribe_events_venue_created'), 10, 2 );
 		add_action( 'tribe_events_update_meta', array( $this, 'tribe_events_update_meta'), 10, 2 );
 
@@ -609,7 +608,7 @@ class oeticket_Event_Importer {
 		if ( ! is_wp_error( $raw_venue ) && ! empty( $raw_venue->venue_name ) ) {
 			$venue->oeticket_url = $oeticket_venue_link;
 			$venue->name = ( !empty( $raw_venue->venue_name ) ) ? trim( $raw_venue->venue_name ) : false;
-			$venue->description = ( !empty( $raw_venue->venue_description ) ) ? wp_strip_all_tags( $raw_venue->venue_description ) : false;
+			$venue->description = false;
 			$venue->address = ( !empty( $raw_venue->venue_street ) ) ? trim( $raw_venue->venue_street ) : false;
 			$venue->city = ( !empty( $raw_venue->venue_city ) ) ? trim( rtrim( $raw_venue->venue_city, ',' )) : false;
 			$venue->country = ( !empty( $raw_venue->venue_country ) ) ? trim( $raw_venue->venue_country ) : false;
@@ -649,6 +648,12 @@ class oeticket_Event_Importer {
 		return apply_filters( 'oeticket_determine_if_is_all_day', $is_all_day, $start_time, $enddate, $oeticket_url );
 	}
 
+	public function strip_description_field( $string ) {
+		$allowed_html = wp_kses_allowed_html('post');
+		unset($allowed_html['div']); // remove markup from oeticket website
+		return wp_kses(wp_kses_stripslashes( $string ), $allowed_html);
+	}
+
 	/**
 	 * parse an oeticket event to get all the necessary
 	 * params to create the local event
@@ -670,7 +675,7 @@ class oeticket_Event_Importer {
 			'post_title' => ( !empty( $oeticket_event->title ) ) ? $oeticket_event->title : '',
 			'post_status' => 'draft',
 			'post_author' => get_current_user_id(),
-			'post_content' => wp_strip_all_tags( $oeticket_event->description ),
+			'post_content' => $this->strip_description_field( $oeticket_event->description ),
 		);
 
 		// set venue only if we have at least a name
@@ -687,8 +692,7 @@ class oeticket_Event_Importer {
 				'Address' => ! empty( $local_venue_address ) ? $local_venue_address : $venue->address,
 				'City' =>  ! empty( $local_venue_city ) ? $local_venue_city : $venue->city,
 				'Country' => ! empty( $local_venue_country ) ? $local_venue_country : $venue->country,
-				'Zip' => ! empty( $local_venue_zip ) ? $local_venue_zip : $venue->zip,
-				'Description' => ! empty( $local_venue_description ) ? $local_venue_description : $venue->description,
+				'Zip' => ! empty( $local_venue_zip ) ? $local_venue_zip : $venue->zip
 			);
 
 			if ( $venue->oeticket_url ) {
@@ -881,12 +885,6 @@ class oeticket_Event_Importer {
 
 		if ( ! empty( $data['EventVenueID'] ) && ! get_post_meta( $post_id, '_EventVenueID', true ) ) {
 			return update_post_meta( $post_id, '_EventVenueID', $data['EventVenueID'] );
-		}
-	}
-
-	public function tribe_events_venue_updated( $venue_id, $data ) {
-		if ( !empty( $data['Description'] ) ) {
-			wp_update_post( array( 'ID' => $venue_id, 'post_content' => $data['Description'] ) );
 		}
 	}
 
