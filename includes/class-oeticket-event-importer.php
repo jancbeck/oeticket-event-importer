@@ -19,7 +19,7 @@ class oeticket_Event_Importer {
 	protected static $instance;
 	const VERSION = '1.0.0';
 	const REQUIRED_TEC_VERSION = '3.5';
-	protected static $plugin_slug = 'oeticket-event-importer';
+	protected $plugin_slug = 'oeticket-event-importer';
 	public $errors = array();
 	public $errors_images = array();
 	public $success = false;
@@ -902,8 +902,8 @@ class oeticket_Event_Importer {
 	static function fail_message() {
 		if ( current_user_can( 'activate_plugins' ) ) {
 			$url = add_query_arg( array( 'tab' => 'plugin-information', 'plugin' => 'the-events-calendar', 'TB_iframe' => 'true' ), admin_url( 'plugin-install.php' ) );
-			$title = __( 'The Events Calendar', self::$plugin_slug );
-			echo '<div class="error"><p>' . sprintf( __( 'To begin using The Events Calendar: oeticket.com Event Importer, please install the latest version of %s.', self::$plugin_slug ), '<a href="' . $url . '" class="thickbox" title="' . $title . '">' . $title . '</a>', $title ) . '</p></div>';
+			$title = __( 'The Events Calendar', 'oeticket-event-importer' );
+			echo '<div class="error"><p>' . sprintf( __( 'To begin using The Events Calendar: oeticket.com Event Importer, please install the latest version of %s.', 'oeticket-event-importer' ), '<a href="' . $url . '" class="thickbox" title="' . $title . '">' . $title . '</a>', $title ) . '</p></div>';
 		}
 	}
 
