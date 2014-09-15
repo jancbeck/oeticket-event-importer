@@ -18,7 +18,7 @@ class oeticket_Event_Importer {
 
 	protected static $instance;
 	const VERSION = '1.0.0';
-	const REQUIRED_TEC_VERSION = '3.5';
+	const REQUIRED_TEC_VERSION = '3.7';
 	protected $plugin_slug = 'oeticket-event-importer';
 	public $errors = array();
 	public $errors_images = array();
@@ -673,7 +673,7 @@ class oeticket_Event_Importer {
 		$event_params = array(
 			'OeticketURL' => $oeticket_event->oeticket_url,
 			'post_title' => ( !empty( $oeticket_event->title ) ) ? $oeticket_event->title : '',
-			'post_status' => 'draft',
+			'post_status' => 'publish',
 			'post_author' => get_current_user_id(),
 			'post_content' => $this->strip_description_field( $oeticket_event->description ),
 		);
@@ -771,8 +771,8 @@ class oeticket_Event_Importer {
 
 		if ( isset( $oeticket_event->title ) ) {
 
-			if ( ! empty( $oeticket_event->{'cover/_source'} ) ) {
-				$event_cover = apply_filters( 'oeticket_event_cover', $this->get_event_cover( "http:". $oeticket_event->{'cover/_source'} ), $oeticket_event );
+			if ( ! empty( $oeticket_event->{'cover'} ) ) {
+				$event_cover = apply_filters( 'oeticket_event_cover', $this->get_event_cover( $oeticket_event->{'cover'} ), $oeticket_event );
 			}
 
 			$imported = array();
@@ -799,7 +799,7 @@ class oeticket_Event_Importer {
 						$event_cover['url'] = stripslashes($event_cover['url']);
 						$uploads = wp_upload_dir();
 						$wp_filetype = wp_check_filetype($event_cover['url'], null );
-						$filename = wp_unique_filename( $uploads['path'], basename('oeticket_event_' . $oeticket_event->id), $unique_filename_callback = null ) . '.' . $wp_filetype['ext'];
+						$filename = wp_unique_filename( $uploads['path'], basename('oeticket_event_' . $event_id), $unique_filename_callback = null ) . '.' . $wp_filetype['ext'];
 						$full_path_filename = $uploads['path'] . "/" . $filename;
 
 						if ( substr_count( $wp_filetype['type'], "image" ) ) {

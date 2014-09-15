@@ -3,7 +3,7 @@
  * Plugin Name:       oeticket.com Event Importer
  * Plugin URI:        http://jancbeck.com/oeticket-importer/
  * Description:       This plugin allows you to easily import event data from oeticket.com to the Events Calendar by Modern Tribe for WordPress.
- * Version:           1.0.0
+ * Version:           1.0.1
  * Author:            Jan Beck
  * Author URI:        http://jancbeck.com/
  * Text Domain:       oeticket-event-importer

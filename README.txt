@@ -4,7 +4,7 @@ Donate link: http://jancbeck.com/
 Tags: import, events, event calendar, calendar, tickets
 Requires at least: 3.9.1
 Tested up to: 3.9.1
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -93,11 +93,13 @@ directory take precedence. For example, `/assets/screenshot-1.png` would win ove
 
 == Upgrade Notice ==
 
-= 1.0 =
-Upgrade notices describe the reason a user should upgrade.  No more than 300 characters.
+= 1.0.1 =
+- Added support for The Events Calendar 3.7.
+- New events are now published by default.
+- Fixed a bug where cover images would not download correctly.
 
-= 0.5 =
-This version fixes a security related bug.  Upgrade immediately.
+= 1.0.0 =
+Initial version of the plugin.
 
 == Arbitrary section ==
 
