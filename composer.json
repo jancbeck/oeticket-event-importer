@@ -1,0 +1,12 @@
+{
+    "name": "jancbeck/oeticket-event-importer",
+    "description": "This plugin allows you to easily import event data from oeticket.com to the Events Calendar by Modern Tribe for WordPress.",
+    "license": "GPLv2 or later",
+    "authors": [
+        {
+            "name": "Jan Beck",
+            "email": "delite.jcb@googlemail.com"
+        }
+    ],
+    "require": {}
+}
