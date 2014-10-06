@@ -9,5 +9,7 @@
             "email": "delite.jcb@googlemail.com"
         }
     ],
-    "require": {}
+    "require": {
+    	"composer/installers": "*"
+    }
 }
