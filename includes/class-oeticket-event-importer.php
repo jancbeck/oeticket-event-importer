@@ -18,7 +18,7 @@ class oeticket_Event_Importer {
 
 	protected static $instance;
 	const VERSION = '1.0.0';
-	const REQUIRED_TEC_VERSION = '3.7';
+	const REQUIRED_TEC_VERSION = '3.8';
 	protected $plugin_slug = 'oeticket-event-importer';
 	public $errors = array();
 	public $errors_images = array();
